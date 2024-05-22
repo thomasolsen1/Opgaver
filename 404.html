@@ -1,50 +1,54 @@
-
-
-import os
-from langchain.llms import CTransformers
-from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-from langchain.chains import ConversationChain
-from langchain.chains.conversation.memory import ConversationBufferMemory
-
-model_id = "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
-os.environ["XDG_CACHE_HOME"] = '/model/cache/'
-config = {"temperature": 0.00, 'context_length': 4000}
-
-llm = CTransformers(model=model_id,
-                   model_type='mistral',
-                   config=config,
-                   callbacks=[StreamingStdOutCallbackHandler()])
-
-llm("Write a function to return 10 random numbers")
-
-####################################################################################################################
-
-# Load required libraries
 library(reticulate)
+library(tidyverse)
+library(magrittr)
+library(purrr)
+library(dplyr)
 
-# Set environment variables
-Sys.setenv(XDG_CACHE_HOME='/model/cache/')
+source("C:/Users/B375477/Desktop/Opgaver/MISTRAL1.r")
 
-# Load the necessary Python modules
-os <- import("os")
-llms <- import("langchain.llms")
-StreamingStdOutCallbackHandler <- import("langchain.callbacks.streaming_stdout", convert=FALSE)
-ConversationChain <- import("langchain.chains", convert=FALSE)
-ConversationBufferMemory <- import("langchain.chains.conversation.memory", convert=FALSE)
+prompt <- "Is this study about a Functional Family Therapy (FFT) intervention?"
+loaded_objects <- load("C:/Users/B375477/Desktop/Opgaver/filges2015_dat_modified.rda")
+instructions <- list(
+    "If the study should be included for further review, write '1'.",
+    "If the study should be excluded, write '0'.",
+    "If there is not enough information to make a clear decision, write '1.1'.",
+    "If there is no or only a little information in the title and abstract also write '1.1'",
+    "When providing the response only provide the numerical decision."
+)
+data <- get(loaded_objects)
+data <- data[-((nrow(data)-4):nrow(data)), ]
 
-# Define model parameters
-model_id <- "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
-config <- list(temperature=0.00, context_length=4000)
+chat <- function(data, prompt) {
+    # Initialize an empty data frame to store the results
+    results <- tibble::tibble(Title = character(), StudyID = character(), decision_gpt = character(), decision_numeric = numeric())
 
-# Initialize the model
-llm <- llms$CTransformers(model=model_id,
-                          model_type='mistral',
-                          config=config,
-                          callbacks=list(StreamingStdOutCallbackHandler()))
+    # Loop over each row of the data
+    for (i in 1:nrow(data)) {
+        # Extract the study details
+        study_details <- paste(data[i, "title"], data[i, "abstract"], sep = " ")
+        
+        # Convert the instructions list to a string
+        instructions_str <- paste(instructions, collapse = " ")
+        
+        # Create the user message
+        user_message <- paste0(prompt, " ", study_details, " ", instructions_str, " ")
+        
+        # Use the language model
+        resp <- llm(user_message)
 
+        # Convert the Python string to an R character string
+        decision_gpt <- reticulate::py_to_r(resp)
 
-llm("Write a function to return 10 random numbers")
+        # Extract the numeric decision from the response
+        decision_numeric <- as.numeric(str_extract(decision_gpt, "\\d+\\.?\\d*"))
 
+        # Add a new row to the results tibble
+        results <- tibble::add_row(results, Title = as.character(data[i, "title"]), StudyID = as.character(data[i, "studyid"]), decision_gpt = decision_gpt, decision_numeric = decision_numeric)
+    }
+    return(results)
+}
+
+print(chat(data, prompt))
 
   #################################################################################
 ---
